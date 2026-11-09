@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#ffffff">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Sound Circles — ฉากถ่ายหนังสั้น</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#111; --muted:#6b6b6b; --glass:rgba(255,255,255,.72); --line:rgba(0,0,0,.08);
+    --accent:#ff2d6f;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;background:#fff;overflow:hidden;font-family:"Prompt",system-ui,-apple-system,"Segoe UI",sans-serif;color:var(--ink)}
+  canvas{position:fixed;inset:0;width:100%;height:100%;display:block}
+  body.hide-cursor{cursor:none}
+
+  /* ---------- start screen ---------- */
+  #intro{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    gap:22px;padding:24px;text-align:center;background:rgba(255,255,255,.55);backdrop-filter:blur(18px);
+    -webkit-backdrop-filter:blur(18px);z-index:20;transition:opacity .5s}
+  #intro.gone{opacity:0;pointer-events:none}
+  .dots{display:flex;gap:10px}
+  .dots i{width:16px;height:16px;border-radius:50%;display:block;animation:bob 1.4s ease-in-out infinite}
+  .dots i:nth-child(2){animation-delay:.15s}.dots i:nth-child(3){animation-delay:.3s}
+  .dots i:nth-child(4){animation-delay:.45s}.dots i:nth-child(5){animation-delay:.6s}
+  @keyframes bob{50%{transform:translateY(-10px) scale(1.25)}}
+  h1{font-weight:600;font-size:clamp(28px,6vw,54px);letter-spacing:-.02em;line-height:1.1}
+  .sub{color:var(--muted);font-weight:300;font-size:clamp(14px,2.4vw,18px);max-width:520px}
+  .btn{appearance:none;border:0;cursor:pointer;font:inherit;border-radius:999px;padding:16px 30px;font-size:17px;
+    font-weight:600;background:var(--ink);color:#fff;box-shadow:0 10px 30px rgba(0,0,0,.18);transition:transform .15s}
+  .btn:active{transform:scale(.96)}
+  .link{background:none;border:0;font:inherit;color:var(--muted);text-decoration:underline;cursor:pointer;font-size:14px}
+  #err{color:#d1003f;font-size:14px;max-width:460px;min-height:1em}
+
+  /* ---------- control bar ---------- */
+  #bar{position:fixed;left:50%;bottom:max(18px,env(safe-area-inset-bottom));transform:translateX(-50%);
+    display:flex;align-items:center;gap:6px;padding:8px;border-radius:999px;background:var(--glass);
+    border:1px solid var(--line);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
+    box-shadow:0 8px 30px rgba(0,0,0,.08);z-index:10;transition:opacity .4s,transform .4s;max-width:calc(100vw - 20px);
+    overflow-x:auto;scrollbar-width:none}
+  #bar::-webkit-scrollbar{display:none}
+  #bar.hidden{opacity:0;transform:translate(-50%,20px);pointer-events:none}
+  .ib{appearance:none;border:0;background:transparent;font:inherit;font-size:13px;color:var(--ink);cursor:pointer;
+    padding:9px 14px;border-radius:999px;white-space:nowrap;display:flex;align-items:center;gap:6px}
+  .ib:hover{background:rgba(0,0,0,.05)}
+  .ib.on{background:var(--ink);color:#fff}
+  .sep{width:1px;height:22px;background:var(--line);flex:none}
+  .sens{display:flex;align-items:center;gap:8px;padding:0 10px;font-size:13px;color:var(--muted);white-space:nowrap}
+  input[type=range]{-webkit-appearance:none;appearance:none;width:110px;height:4px;border-radius:4px;background:#e6e6e6;outline:none}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;border-radius:50%;background:var(--ink);cursor:pointer}
+  input[type=range]::-moz-range-thumb{width:18px;height:18px;border:0;border-radius:50%;background:var(--ink);cursor:pointer}
+  select{font:inherit;font-size:13px;border:0;background:transparent;max-width:150px;color:var(--ink);cursor:pointer}
+  .meter{width:44px;height:6px;border-radius:6px;background:#eee;overflow:hidden;flex:none}
+  .meter b{display:block;height:100%;width:0;background:var(--accent);transition:width .05s}
+
+  #hint{position:fixed;top:max(14px,env(safe-area-inset-top));left:50%;transform:translateX(-50%);font-size:12px;
+    color:var(--muted);background:var(--glass);border:1px solid var(--line);padding:6px 12px;border-radius:999px;
+    backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);transition:opacity .6s;z-index:10;white-space:nowrap}
+  #hint.hidden{opacity:0}
+  @media (max-width:640px){.kb{display:none}}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<div id="intro">
+  <div class="dots" id="introDots"></div>
+  <h1>Sound Circles</h1>
+  <p class="sub">ฉากหลังสีขาวสำหรับถ่ายหนังสั้น — วงกลมสีสดจะเต้นตามเสียงพูด เพลง หรือเสียงรอบตัวจากไมโครโฟน</p>
+  <button class="btn" id="startBtn">🎙️ เริ่มใช้ไมโครโฟน</button>
+  <button class="link" id="demoBtn">ลองโหมดสาธิต (ไม่ใช้ไมค์)</button>
+  <p id="err"></p>
+</div>
+
+<div id="bar" class="hidden">
+  <span class="meter" title="ระดับเสียง"><b id="meter"></b></span>
+  <div class="sep"></div>
+  <button class="ib on" data-layout="cluster">กลุ่ม</button>
+  <button class="ib" data-layout="row">แถว</button>
+  <button class="ib" data-layout="single">วงเดียว</button>
+  <button class="ib" data-layout="scatter">กระจาย</button>
+  <div class="sep"></div>
+  <button class="ib" id="paletteBtn">🎨 <span id="paletteName">Pop</span></button>
+  <div class="sep"></div>
+  <label class="sens">ความไว <input type="range" id="sens" min="0.4" max="4" step="0.1" value="1.6"></label>
+  <div class="sep"></div>
+  <select id="micSel" title="เลือกไมโครโฟน"></select>
+  <div class="sep"></div>
+  <button class="ib" id="fsBtn">⛶ เต็มจอ</button>
+  <button class="ib" id="hideBtn">ซ่อนแถบ</button>
+</div>
+
+<div id="hint" class="hidden">แตะจอเพื่อแสดง/ซ่อนแถบควบคุม<span class="kb"> · F เต็มจอ · H ซ่อน · C สี · 1–4 รูปแบบ</span></div>
+
+<script>
+(() => {
+  // ---------------- palettes ----------------
+  const PALETTES = [
+    {name:"Pop",    c:["#FF2D6F","#FFB800","#00C2A8","#3D5AFE","#B620E0"]},
+    {name:"Candy",  c:["#FF5DA2","#FF8A3D","#FFD23F","#3EC1FF","#8A5CFF"]},
+    {name:"Neon",   c:["#FF0055","#00E5FF","#C6FF00","#FF6D00","#651FFF"]},
+    {name:"Tropic", c:["#FF4E50","#F9D423","#1FDDFF","#00B16A","#FF2E93"]},
+    {name:"Mono",   c:["#111111","#2a2a2a","#444444","#5e5e5e","#787878"]},
+  ];
+  let paletteIdx = 0;
+
+  // Bands (Hz) — each circle listens to one
+  const BANDS = [[35,160],[160,450],[450,1200],[1200,3000],[3000,8000]];
+
+  // ---------------- canvas ----------------
+  const cv = document.getElementById('c');
+  const ctx = cv.getContext('2d');
+  let W=0,H=0,DPR=1;
+  function resize(){
+    DPR = Math.min(window.devicePixelRatio||1, 2);
+    W = innerWidth; H = innerHeight;
+    cv.width = W*DPR; cv.height = H*DPR;
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+  }
+  addEventListener('resize', resize); resize();
+
+  // ---------------- state ----------------
+  const N = BANDS.length;
+  const circles = Array.from({length:N},(_,i)=>({
+    lvl:0, x:W/2, y:H/2, r:0, seed:Math.random()*1000, phase:i*1.3
+  }));
+  let layout = 'cluster';
+  let overall = 0, avgOverall = 0;
+  let ripples = [];
+  let lastBeat = 0;
+  let mode = null; // 'mic' | 'demo'
+  let ctxA=null, analyser=null, freq=null, timeBuf=null, stream=null;
+
+  const sensEl = document.getElementById('sens');
+  const meterEl = document.getElementById('meter');
+  try{ const s = localStorage.getItem('sc_sens'); if(s) sensEl.value = s; }catch(e){}
+  try{ const p = localStorage.getItem('sc_pal'); if(p) paletteIdx = +p % PALETTES.length; }catch(e){}
+  try{ const l = localStorage.getItem('sc_layout'); if(l) layout = l; }catch(e){}
+
+  // ---------------- audio ----------------
+  async function startMic(deviceId){
+    const err = document.getElementById('err');
+    err.textContent = '';
+    if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+      err.textContent = 'เบราว์เซอร์นี้ใช้ไมค์ไม่ได้ — ต้องเปิดผ่าน https:// หรือเปิดไฟล์ในเครื่องด้วย Chrome / Safari / Edge';
+      return false;
+    }
+    try{
+      if(stream) stream.getTracks().forEach(t=>t.stop());
+      stream = await navigator.mediaDevices.getUserMedia({audio:{
+        deviceId: deviceId ? {exact:deviceId} : undefined,
+        echoCancellation:false, noiseSuppression:false, autoGainControl:false
+      }});
+      if(!ctxA){
+        const AC = window.AudioContext || window.webkitAudioContext;
+        ctxA = new AC();
+      }
+      if(ctxA.state === 'suspended') await ctxA.resume();
+      analyser = ctxA.createAnalyser();
+      analyser.fftSize = 2048;
+      analyser.smoothingTimeConstant = 0.55;
+      analyser.minDecibels = -95;
+      analyser.maxDecibels = -20;
+      ctxA.createMediaStreamSource(stream).connect(analyser);
+      freq = new Uint8Array(analyser.frequencyBinCount);
+      timeBuf = new Uint8Array(analyser.fftSize);
+      mode = 'mic';
+      populateMics();
+      return true;
+    }catch(e){
+      err.textContent = (e && e.name === 'NotAllowedError')
+        ? 'ไม่ได้รับอนุญาตให้ใช้ไมค์ — กดไอคอนแม่กุญแจบนแถบที่อยู่ แล้วอนุญาตไมโครโฟน'
+        : 'เปิดไมค์ไม่ได้: ' + (e && e.message || e);
+      return false;
+    }
+  }
+
+  async function populateMics(){
+    const sel = document.getElementById('micSel');
+    try{
+      const devs = (await navigator.mediaDevices.enumerateDevices()).filter(d=>d.kind==='audioinput');
+      const cur = stream && stream.getAudioTracks()[0] && stream.getAudioTracks()[0].getSettings().deviceId;
+      sel.innerHTML = devs.map((d,i)=>`<option value="${d.deviceId}" ${d.deviceId===cur?'selected':''}>🎙️ ${d.label||('ไมค์ '+(i+1))}</option>`).join('');
+      sel.style.display = devs.length>1 ? '' : 'none';
+      sel.previousElementSibling.style.display = devs.length>1 ? '' : 'none';
+    }catch(e){ sel.style.display='none'; }
+  }
+  document.getElementById('micSel').addEventListener('change', e=>startMic(e.target.value));
+
+  function bandLevel(lo,hi){
+    const nyq = ctxA.sampleRate/2, n = freq.length;
+    let a = Math.max(1, Math.floor(lo/nyq*n)), b = Math.min(n-1, Math.ceil(hi/nyq*n));
+    let s = 0, m = 0;
+    for(let i=a;i<=b;i++){ s += freq[i]; if(freq[i]>m) m=freq[i]; }
+    const avg = s/Math.max(1,b-a+1);
+    return (avg*0.6 + m*0.4)/255;
+  }
+
+  function readLevels(t){
+    const sens = parseFloat(sensEl.value);
+    const out = new Array(N);
+    if(mode === 'mic' && analyser){
+      analyser.getByteFrequencyData(freq);
+      analyser.getByteTimeDomainData(timeBuf);
+      let rms = 0;
+      for(let i=0;i<timeBuf.length;i++){ const v=(timeBuf[i]-128)/128; rms+=v*v; }
+      rms = Math.sqrt(rms/timeBuf.length);
+      overall = Math.min(1, rms*sens*4.5);
+      for(let i=0;i<N;i++){
+        const v = bandLevel(BANDS[i][0],BANDS[i][1]);
+        // remove floor, apply sensitivity, gentle curve
+        out[i] = Math.min(1, Math.pow(Math.max(0, v-0.12)*sens*1.35, 0.9));
+      }
+    } else {
+      // demo: synthetic "speech/music"
+      const beat = Math.pow(Math.max(0, Math.sin(t*0.0042)), 8);
+      const talk = (Math.sin(t*0.011)+Math.sin(t*0.0173)+Math.sin(t*0.0071))/3*0.5+0.5;
+      for(let i=0;i<N;i++){
+        const n = Math.sin(t*0.002*(i+1)+i*2)*0.5+0.5;
+        out[i] = Math.min(1, (i===0?beat*0.9:0) + talk*n*0.75*sens/1.6);
+      }
+      overall = Math.min(1, (beat*0.6+talk*0.5)*sens/1.6);
+    }
+    return out;
+  }
+
+  // ---------------- layout targets ----------------
+  function targets(t){
+    const m = Math.min(W,H);
+    const res = [];
+    if(layout === 'single'){
+      for(let i=0;i<N;i++) res.push({x:W/2, y:H/2, base:m*(0.26 - i*0.042), amp:m*(0.08 + i*0.006)});
+    } else if(layout === 'row'){
+      const gap = Math.min(W/(N+0.6), H*0.7);
+      const startX = W/2 - gap*(N-1)/2;
+      for(let i=0;i<N;i++) res.push({x:startX+gap*i, y:H/2 + Math.sin(t*0.0012+i)*m*0.015, base:gap*0.22, amp:gap*0.26});
+    } else if(layout === 'scatter'){
+      const pts = [[.22,.3],[.76,.24],[.5,.55],[.2,.76],[.8,.74]];
+      for(let i=0;i<N;i++){
+        const p = pts[i];
+        res.push({x:W*p[0] + Math.sin(t*0.0004+i*2)*m*0.03, y:H*p[1] + Math.cos(t*0.0005+i)*m*0.03, base:m*0.06, amp:m*0.1});
+      }
+    } else { // cluster
+      const R = m*0.21;
+      for(let i=0;i<N;i++){
+        const a = (i/N)*Math.PI*2 - Math.PI/2 + t*0.00012;
+        const rr = R*(1 + 0.08*Math.sin(t*0.0009+i));
+        res.push({x:W/2 + Math.cos(a)*rr, y:H/2 + Math.sin(a)*rr, base:m*0.06, amp:m*0.1});
+      }
+    }
+    return res;
+  }
+
+  // ---------------- render loop ----------------
+  let lastT = performance.now();
+  function frame(t){
+    const dt = Math.min(50, t-lastT); lastT = t;
+    const lv = mode ? readLevels(t) : new Array(N).fill(0.05 + 0.04*Math.sin(t*0.002));
+    const tg = targets(t);
+    const pal = PALETTES[paletteIdx].c;
+
+    // beat detection → ripple
+    avgOverall += (overall - avgOverall)*0.03;
+    if(mode && overall > 0.18 && overall > avgOverall*1.55 && t-lastBeat > 180){
+      lastBeat = t;
+      const k = Math.floor(Math.random()*N);
+      ripples.push({x:circles[k].x, y:circles[k].y, r:circles[k].r, a:0.55, c:pal[k]});
+    }
+    meterEl.style.width = (overall*100).toFixed(0)+'%';
+
+    ctx.clearRect(0,0,W,H);
+    ctx.fillStyle = '#fff'; ctx.fillRect(0,0,W,H);
+
+    // ripples
+    ctx.lineWidth = 3;
+    ripples = ripples.filter(r=>r.a>0.01);
+    for(const r of ripples){
+      r.r += dt*0.35; r.a *= Math.pow(0.94, dt/16);
+      ctx.strokeStyle = hexA(r.c, r.a);
+      ctx.beginPath(); ctx.arc(r.x,r.y,r.r,0,Math.PI*2); ctx.stroke();
+    }
+
+    for(let i=0;i<N;i++){
+      const c = circles[i], g = tg[i];
+      const target = lv[i];
+      const k = target > c.lvl ? 0.55 : 0.09;          // fast attack, smooth release
+      c.lvl += (target - c.lvl)*k;
+      const follow = 1 - Math.pow(0.88, dt/16);
+      c.x += (g.x - c.x)*follow;
+      c.y += (g.y - c.y)*follow;
+      const breathe = 1 + Math.sin(t*0.0016 + c.phase)*0.03;
+      const rTarget = (g.base + g.amp*c.lvl) * breathe;
+      c.r += (rTarget - c.r)*0.5;
+
+      // soft glow
+      const glow = ctx.createRadialGradient(c.x,c.y,c.r*0.6,c.x,c.y,c.r*1.6);
+      glow.addColorStop(0, hexA(pal[i], 0.18 + c.lvl*0.25));
+      glow.addColorStop(1, hexA(pal[i], 0));
+      ctx.fillStyle = glow;
+      ctx.beginPath(); ctx.arc(c.x,c.y,c.r*1.6,0,Math.PI*2); ctx.fill();
+
+      // blob body (slightly wobbly when loud)
+      ctx.fillStyle = hexA(pal[i], layout==='single' ? 0.55 : 0.86);
+      drawBlob(c.x, c.y, c.r, c.lvl, t, c.seed);
+    }
+
+    requestAnimationFrame(frame);
+  }
+
+  function drawBlob(x,y,r,lvl,t,seed){
+    const pts = 64, wob = r*0.03*Math.min(1,lvl*1.2);
+    ctx.beginPath();
+    for(let j=0;j<=pts;j++){
+      const a = j/pts*Math.PI*2;
+      const d = r + wob*(Math.sin(a*3 + t*0.006 + seed) + 0.6*Math.sin(a*5 - t*0.008 + seed*2));
+      const px = x + Math.cos(a)*d, py = y + Math.sin(a)*d;
+      j ? ctx.lineTo(px,py) : ctx.moveTo(px,py);
+    }
+    ctx.closePath(); ctx.fill();
+  }
+
+  function hexA(hex, a){
+    const n = parseInt(hex.slice(1),16);
+    return `rgba(${n>>16&255},${n>>8&255},${n&255},${a})`;
+  }
+
+  requestAnimationFrame(frame);
+
+  // ---------------- UI ----------------
+  const intro = document.getElementById('intro');
+  const bar = document.getElementById('bar');
+  const hint = document.getElementById('hint');
+  const dots = document.getElementById('introDots');
+  function paintDots(){ dots.innerHTML = PALETTES[paletteIdx].c.map(c=>`<i style="background:${c}"></i>`).join(''); }
+  paintDots();
+
+  function applyLayoutButtons(){
+    document.querySelectorAll('[data-layout]').forEach(b=>b.classList.toggle('on', b.dataset.layout===layout));
+  }
+  applyLayoutButtons();
+  document.getElementById('paletteName').textContent = PALETTES[paletteIdx].name;
+
+  async function begin(useMic){
+    if(useMic){
+      const ok = await startMic();
+      if(!ok) return;
+    } else {
+      mode = 'demo';
+      document.getElementById('micSel').style.display='none';
+    }
+    intro.classList.add('gone');
+    showUI();
+    hint.classList.remove('hidden');
+    setTimeout(()=>hint.classList.add('hidden'), 5000);
+    keepAwake();
+  }
+  document.getElementById('startBtn').onclick = ()=>begin(true);
+  document.getElementById('demoBtn').onclick = ()=>begin(false);
+
+  function setLayout(l){
+    layout = l; applyLayoutButtons();
+    try{ localStorage.setItem('sc_layout', l); }catch(e){}
+  }
+  document.querySelectorAll('[data-layout]').forEach(b=>b.onclick=()=>setLayout(b.dataset.layout));
+
+  function nextPalette(){
+    paletteIdx = (paletteIdx+1)%PALETTES.length;
+    document.getElementById('paletteName').textContent = PALETTES[paletteIdx].name;
+    paintDots();
+    try{ localStorage.setItem('sc_pal', paletteIdx); }catch(e){}
+  }
+  document.getElementById('paletteBtn').onclick = nextPalette;
+  sensEl.oninput = ()=>{ try{ localStorage.setItem('sc_sens', sensEl.value); }catch(e){} };
+
+  function toggleFS(){
+    const d = document, el = d.documentElement;
+    const fsEl = d.fullscreenElement || d.webkitFullscreenElement;
+    try{
+      if(!fsEl){ (el.requestFullscreen || el.webkitRequestFullscreen).call(el); }
+      else { (d.exitFullscreen || d.webkitExitFullscreen).call(d); }
+    }catch(e){}
+  }
+  document.getElementById('fsBtn').onclick = toggleFS;
+
+  // auto-hide controls
+  let hideTimer=null, forcedHidden=false;
+  function showUI(){
+    if(!mode) return;
+    bar.classList.remove('hidden');
+    document.body.classList.remove('hide-cursor');
+    clearTimeout(hideTimer);
+    hideTimer = setTimeout(hideUI, 3500);
+  }
+  function hideUI(){
+    bar.classList.add('hidden');
+    document.body.classList.add('hide-cursor');
+  }
+  document.getElementById('hideBtn').onclick = (e)=>{ e.stopPropagation(); hideUI(); };
+  addEventListener('pointermove', e=>{ if(e.pointerType==='mouse') showUI(); });
+  cv.addEventListener('pointerdown', ()=>{ bar.classList.contains('hidden') ? showUI() : hideUI(); });
+  bar.addEventListener('pointerdown', e=>{ e.stopPropagation(); showUI(); });
+
+  addEventListener('keydown', e=>{
+    if(!mode) return;
+    const k = e.key.toLowerCase();
+    if(k==='f') toggleFS();
+    else if(k==='h') bar.classList.contains('hidden') ? showUI() : hideUI();
+    else if(k==='c') nextPalette();
+    else if(['1','2','3','4'].includes(k)) setLayout(['cluster','row','single','scatter'][+k-1]);
+    else if(k==='arrowup'){ sensEl.value = Math.min(4, +sensEl.value+0.2); sensEl.oninput(); }
+    else if(k==='arrowdown'){ sensEl.value = Math.max(0.4, +sensEl.value-0.2); sensEl.oninput(); }
+  });
+
+  // keep the screen awake while filming
+  let wakeLock = null;
+  async function keepAwake(){
+    try{ if('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen'); }catch(e){}
+  }
+  document.addEventListener('visibilitychange', ()=>{
+    if(document.visibilityState==='visible'){
+      if(mode) keepAwake();
+      if(ctxA && ctxA.state==='suspended') ctxA.resume();
+    }
+  });
+})();
+</script>
+</body>
+</html>
